@@ -176,6 +176,9 @@ struct DQBarrelTrackSelection {
 
   Configurable<std::string> fConfigElectronCuts{"cfgElectronCuts", "jpsiPID1", "Comma separated list of barrel track cuts"};
 
+  // Configurable<std::string> fConfigElectronCuts{"cfgElectronCuts", "jpsiPID_tm", "Comma separated list of barrel track cuts"};
+  // Configurable<std::string> fConfigHadronCuts{"cfgHadronCuts", "PionSelection", "Comma separated list of barrel track cuts"};
+
   void init(o2::framework::InitContext&)
   {
     DefineCuts();
@@ -704,15 +707,282 @@ struct DQDileptonHadronAnalysis {
   }
 };
 
+//////////////////////////////////
+///////////// tariq exotics
+struct DQDileptonDiHadronAnalysis {
+
+  int fAllEvents=0;  //int fEventsPassingH1=0; int fEventsPassingH2=0; 
+  int fEventsPassingHH=0; int fEventsPassingLL=0; int fEventsPassingLLHH=0;int fSelEvents=0;
+
+  int fNLL=0;  int fNLLSel=0;  int fNHH=0;  int fNHHSel=0; int fNH1=0;  int fNH1Sel=0;  int fNH2=0;  int fNH2Sel=0; 
+  
+  OutputObj<THashList> fOutputList{"output"};
+  HistogramManager* fHistMan;
+  
+  Partition<MyBarrelTracksSelected> PosHadrons = aod::reducedtrack::sign > 0;// && aod::reducedtrack::isBarrelSelected > uint8_t(0);
+  Partition<MyBarrelTracksSelected> NegHadrons = aod::reducedtrack::sign < 0;// && aod::reducedtrack::isBarrelSelected > uint8_t(0);
+  Partition<MyBarrelTracksSelected> NeuHadrons = aod::reducedtrack::sign == 0;// && aod::reducedtrack::isBarrelSelected > uint8_t(0);
+   
+  // use two values array to avoid mixing up the quantities
+  float* fValuesStat;
+  float* fValuesDilepton;
+  float* fValuesHadron;//no need
+  float* fValuesDilepDihad;
+  
+  Filter eventFilter = aod::reducedevent::isEventSelected == 1;
+  Filter dileptonFilter = aod::reducedpair::mass > 0.0f && aod::reducedpair::mass<316.0f && aod::reducedpair::pt> 0.0f && aod::reducedpair::sign == 0;
+  Filter hadronFilter = aod::reducedtrack::pt> 0.1 && aod::reducedtrack::sign != 0;
+  
+  Configurable<std::string> fConfigElectronCuts{"cfgElectronCuts", "jpsiPID_tm", "Comma separated list of barrel track cuts"};
+  Configurable<std::string> fConfigPionCuts{"cfgPionCuts", "PionSelection", "Comma separated list of barrel track cuts"};//move to trackselection
+  
+  Configurable<double> fConfigAlphaJPsiMotherUpperLimit{"cfgOpAngUL", 0.2, "upper limit of openingangle llhh-jpsi "};
+  Configurable<double> fConfigLLMassLowerLimit{"cfgLLMassLowerLimit", 2.92, "lower limit of ll mass "};
+  Configurable<double> fConfigLLMassUpperLimit{"cfgLLMassUpperLimit", 3.16, "upper limit of ll mass "};
+  
+  /////////////////////////////////////////
+  bool Debug=kFALSE;
+
+  int fNHadronCutBit;
+  
+  constexpr static uint32_t fgDileptonFillMap = VarManager::ObjTypes::ReducedTrack | VarManager::ObjTypes::Pair;
+  constexpr static uint32_t fgHadronFillMap = VarManager::ObjTypes::Track | VarManager::ObjTypes::TrackExtra | VarManager::ObjTypes::TrackDCA | VarManager::ObjTypes::TrackSelection | VarManager::ObjTypes::TrackCov | VarManager::ObjTypes::TrackPID;
+  
+  
+  void init(o2::framework::InitContext&)
+  {
+    fValuesStat = new float[VarManager::kNVars];
+    fValuesDilepton = new float[VarManager::kNVars];
+    fValuesHadron = new float[VarManager::kNVars];
+    fValuesDilepDihad = new float[VarManager::kNVars];
+    
+    VarManager::SetDefaultVarNames();
+    fHistMan = new HistogramManager("analysisHistos", "aa", VarManager::kNVars);
+    fHistMan->SetUseDefaultVariableNames(kTRUE);
+    fHistMan->SetDefaultVarNames(VarManager::fgVariableNames, VarManager::fgVariableUnits);
+    
+    
+    ///// FIXME: for the moment define hists here. Not with HistMan.
+    DefineHistograms(fHistMan, "Statistics;Hadrons;Hadron1;Hadron2;HadronsSelected;Hadron1Selected;Hadron2Selected;HadronsII;HadronsSelectedII;Dilepton;DileptonSelected;Dihadron;DihadronSelected;DileptonDihadron"); // define all histograms
+    
+    VarManager::SetUseVars(fHistMan->GetUsedVars());
+    fOutputList.setObject(fHistMan->GetMainHistogramList());
+    
+    fHistMan->AddHistogram("Statistics" , "h_nAllEvents", "# og all events", false, 8, 0.0, 8.0, VarManager::kNAllEvents); 
+    fHistMan->AddHistogram("Statistics" , "h_nEventsPassingLL", "# og all events passing ll", false, 8, 0.0, 8.0, VarManager::kNEventsPassingLL); 
+
+    fHistMan->AddHistogram("Statistics" , "h_nLL", "# ll", false, 10, 0.0, 10.0, VarManager::kNLL); 
+    fHistMan->AddHistogram("Statistics" , "h_nLLSel", "# selected ll ", false, 10, 0.0, 10.0, VarManager::kNLLSel); 
+
+    fHistMan->AddHistogram("Statistics" , "h_nH1", "# pos H", false, 50, 0.0, 50.0, VarManager::kNH1); 
+    fHistMan->AddHistogram("Statistics" , "h_nH1Sel", "# Sel pos H", false, 50, 0.0, 50.0, VarManager::kNH1Sel); 
+    fHistMan->AddHistogram("Statistics" , "h_nH2", "# pos H", false, 50, 0.0, 50.0, VarManager::kNH2); 
+    fHistMan->AddHistogram("Statistics" , "h_nH2Sel", "# Sel pos H", false, 50, 0.0, 50.0, VarManager::kNH2Sel); 
+
+    fHistMan->AddHistogram("Statistics" , "h_nHH", "# hh", false, 100, 0.0, 100.0, VarManager::kNHH); 
+    fHistMan->AddHistogram("Statistics" , "h_nHHSel", "# selected hh ", false, 100, 0.0, 100.0, VarManager::kNHHSel); 
+
+
+    /////////////////////////////
+    fHistMan->AddHistogram("Hadrons" , "h_pt", "pt of h", false, 200, 0.0, 20.0, VarManager::kPt); 
+    fHistMan->AddHistogram("Hadrons" , "h_eta", "eta of h", false, 100, -1.0, 1.0, VarManager::kEta); 
+    fHistMan->AddHistogram("Hadron1" , "h1_pt", "pt of h1", false, 200, 0.0, 20.0, VarManager::kPt); 
+    fHistMan->AddHistogram("Hadron1" , "h1_eta", "eta of h1", false, 100, -1.0, 1.0, VarManager::kEta); 
+    fHistMan->AddHistogram("Hadron2" , "h2_pt", "pt of h2", false, 200, 0.0, 20.0, VarManager::kPt); 
+    fHistMan->AddHistogram("Hadron2" , "h2_eta", "eta of h2", false, 100, -1.0, 1.0, VarManager::kEta); 
+
+
+    fHistMan->AddHistogram("HadronsSelected" , "h_pt", "pt of h", false, 200, 0.0, 20.0, VarManager::kPt); 
+    fHistMan->AddHistogram("HadronsSelected" , "h_eta", "eta of sel h", false, 100, -1.0, 1.0, VarManager::kEta); 
+    fHistMan->AddHistogram("Hadron1Selected" , "h1_pt", "pt of h1", false, 200, 0.0, 20.0, VarManager::kPt); 
+    fHistMan->AddHistogram("Hadron1Selected" , "h1_eta", "eta of sel h1", false, 100, -1.0, 1.0, VarManager::kEta); 
+    fHistMan->AddHistogram("Hadron2Selected" , "h2_pt", "pt of h2", false, 200, 0.0, 20.0, VarManager::kPt); 
+    fHistMan->AddHistogram("Hadron2Selected" , "h2_eta", "eta of sel h2", false, 100, -1.0, 1.0, VarManager::kEta); 
+    //what is the pt of the ll pair: kPt or kPairPt?
+    fHistMan->AddHistogram("Dilepton" , "ll_pt", "pt of ll", false, 200, 0.0, 20.0, VarManager::kPt);     
+    fHistMan->AddHistogram("Dilepton" , "ll_mass", "mass of ll", false, 500, 0.0, 5.0, VarManager::kMass);     
+
+    fHistMan->AddHistogram("DileptonSelected" , "ll_sel_pt", "pt of sel ll", false, 200, 0.0, 20.0, VarManager::kPt);     
+    fHistMan->AddHistogram("DileptonSelected" , "ll_sel_mass", "mass of sel ll", false, 500, 0.0, 5.0, VarManager::kMass);     
+    //DileptonSelected
+    //FIXME: for the moment hh and hhsel are the same
+    fHistMan->AddHistogram("Dihadron" , "diHadron_pt", "pt of dihadron", false, 200, 0.0, 20.0, VarManager::kHHPt);     
+    fHistMan->AddHistogram("Dihadron" , "diHadron_mass", "inv. mass of dihadron", false, 500, 0.0, 10.0, VarManager::kHHMass);         
+    fHistMan->AddHistogram("DihadronSelected" , "diHadronSel_pt", "pt of sel. dihadron", false, 200, 0.0, 20.0, VarManager::kHHPt);     
+    fHistMan->AddHistogram("DihadronSelected" , "diHadronSel_mass", "inv. mass of sel. dihadron", false, 50, 0.0, 5.0, VarManager::kHHMass);     
+    fHistMan->AddHistogram("DileptonDihadron" , "llhh_pt", "pt of llhh", false, 200, 0.0, 20.0, VarManager::kLLHHPt);     
+    fHistMan->AddHistogram("DileptonDihadron" , "llhh_eta", "eta of llhh", false, 600, -1.0, 5.0, VarManager::kLLHHEta);     
+    fHistMan->AddHistogram("DileptonDihadron" , "llhh_mass", "inv. mass of llhh", false, 1000, 0.0, 20.0, VarManager::kLLHHMass);     
+    
+    fHistMan->AddHistogram("DileptonDihadron" , "angle_ll", "angle between llhh and ll", false, 630, 0.0, 6.3, VarManager::kAlphaLL);     
+    fHistMan->AddHistogram("DileptonDihadron" , "angle_h1", "angle between llhh and h1", false, 630, 0.0, 6.3, VarManager::kAlphaH1);     
+    fHistMan->AddHistogram("DileptonDihadron" , "angle_h2", "angle between llhh and h2", false, 630, 0.0, 6.3, VarManager::kAlphaH2);     
+
+    fHistMan->AddHistogram("DileptonDihadron" , "angle_llh1", "angle between ll and h1", false, 630, 0.0, 6.3, VarManager::kAlphaLLH1);     
+    fHistMan->AddHistogram("DileptonDihadron" , "angle_llh2", "angle between ll and h2", false, 630, 0.0, 6.3, VarManager::kAlphaLLH2);     
+    /////////////////////
+    /////////////// test histograms plot hadron pt and lepton pt only within the jpsi-mass region
+    fHistMan->AddHistogram("HadronsII" , "h_pt", "pt of h", false, 200, 0.0, 20.0, VarManager::kPt); 
+    fHistMan->AddHistogram("DileptonDihadron" , "h_pt pos pi", "pt of pos pi", false, 200, 0.0, 20.0, VarManager::kAssociatedPt); 
+
+    fHistMan->AddHistogram("HadronsSelectedII" , "h_pt", "pt of h", false, 200, 0.0, 20.0, VarManager::kPt); 
+    fHistMan->AddHistogram("DileptonDihadron" , "h_pt neg pi", "pt of neg pi", false, 200, 0.0, 20.0, VarManager::kAssociated2Pt); 
+
+    fHistMan->AddHistogram("DileptonDihadron" , "h_TrigMass", "Mass of trigger ll", false, 500, 0.0, 5.0, VarManager::kMassTrigger); //29    
+    fHistMan->AddHistogram("DileptonDihadron" , "h_TrigMass2", "Mass of trigger ll", false, 1000, 2.5, 3.5, VarManager::kMassTrigger); //29    
+
+ 
+    TString configCutNamesStr = fConfigElectronCuts.value;
+    if (!configCutNamesStr.IsNull()) {
+      std::unique_ptr<TObjArray> objArray(configCutNamesStr.Tokenize(","));
+      fNHadronCutBit = objArray->GetEntries();
+    } else {
+      fNHadronCutBit = 0;
+    }
+
+
+  }
+  
+  //___________________________________________________
+  bool IsDiLeptonSelected(double llMass){  
+    //if(llMass < 2.92f || llMass > 3.16f){return false;} && aod::reducedpair::pt> 0.0f && aod::reducedpair::sign == 0;
+    if(llMass < fConfigLLMassLowerLimit || llMass > fConfigLLMassUpperLimit){return false;} 
+    return true;
+  }
+  //___________________________________________________
+  void FillStatistics(int fAllEvents, int fEventsPassingLL, int fEventsPassingLLHH,int fSelEvents,  int fNLL,  int fNLLSel,  int fNHH,  int fNHHSel, int fNH1,  int fNH1Sel,  int fNH2,  int fNH2Sel, float* values){
+    values[VarManager::kNAllEvents]=float(fAllEvents);
+    values[VarManager::kNEventsPassingLL]=float(fEventsPassingLL);
+    values[VarManager::kNLL]=float(fNLL);
+    values[VarManager::kNLLSel]=float(fNLLSel);
+    values[VarManager::kNH1]=float(fNH1);
+    values[VarManager::kNH1Sel]=float(fNH1Sel);
+    values[VarManager::kNH2]=float(fNH2);
+    values[VarManager::kNH2Sel]=float(fNH2Sel);
+    values[VarManager::kNHH]=float(fNHH);
+    values[VarManager::kNHHSel]=float(fNHHSel); 
+  }  
+  
+  //___________________________________________________
+  void process(soa::Filtered<MyEventsVtxCovSelected>::iterator const& event, MyBarrelTracksSelected const& hadrons, soa::Filtered<aod::Dileptons> const& dileptons)
+  {
+
+    fAllEvents=0;  fEventsPassingLL=0;  fEventsPassingHH=0;  fEventsPassingLLHH=0; fSelEvents=0;
+    //FIXME: does it make sence to do this here?
+    VarManager::ResetValues(0, VarManager::kNVars, fValuesDilepton);
+    VarManager::ResetValues(0, VarManager::kNVars, fValuesHadron);
+    VarManager::ResetValues(0, VarManager::kNVars, fValuesDilepDihad);
+    
+    // fill event information which might be needed in histograms that combine track/pair and event properties
+    VarManager::FillEvent<gkEventFillMap>(event, fValuesDilepDihad);
+    VarManager::FillEvent<gkEventFillMap>(event, fValuesDilepton); // TODO: check if needed (just for dilepton QA which might be depending on event wise variables)
+    VarManager::FillEvent<gkEventFillMap>(event, fValuesHadron); // 
+    
+    //////////////////////////////////////
+    fAllEvents++;
+    /////////////////////////////////////////////////////
+    // loop once over dileptons for QA purposes
+    
+    fNLL=0; fNLLSel=0;
+    bool HadronsFilled=0;
+    for (auto& dilepton : dileptons) {
+      VarManager::ResetValues(0, VarManager::kNVars, fValuesDilepton);
+      VarManager::FillTrack<fgDileptonFillMap>(dilepton, fValuesDilepton); 
+      fHistMan->FillHistClass("Dilepton", fValuesDilepton);
+      fNLL++;
+       if(!IsDiLeptonSelected(dilepton.mass() )){continue;}
+      fHistMan->FillHistClass("DileptonSelected", fValuesDilepton);
+ 
+      fNLLSel++;
+      if(!HadronsFilled){
+	for (auto& hadron : hadrons) {
+	  VarManager::FillTrack<gkTrackFillMap>(hadron, fValuesHadron); 
+	  fHistMan->FillHistClass("HadronsII", fValuesHadron);
+	  if (!(hadron.isBarrelSelected() & (uint8_t(1) << fNHadronCutBit))) {continue;}
+	  fHistMan->FillHistClass("HadronsSelectedII", fValuesHadron);
+	  HadronsFilled=1;
+	}
+      }
+    }
+    
+    
+    fNH1=0; fNH1Sel=0;  
+    for (auto& hadron : PosHadrons) {
+       VarManager::FillTrack<gkTrackFillMap>(hadron, fValuesHadron); 
+      
+      if(0){cout<<" nsignal = "<<fValuesHadron[VarManager::kTPCsignal]<<" nsigPi ="<<fValuesHadron[VarManager::kTPCnSigmaPi] << endl;}
+      
+      fHistMan->FillHistClass("Hadrons", fValuesHadron);
+      fHistMan->FillHistClass("Hadron1", fValuesHadron);
+      fNH1++;  
+      
+      if (!(hadron.isBarrelSelected() & (uint8_t(1) << fNHadronCutBit))) {continue;}
+      fHistMan->FillHistClass("HadronsSelected", fValuesHadron);
+      fHistMan->FillHistClass("Hadron1Selected", fValuesHadron);
+      fNH1Sel++;
+    }
+    
+    fNH2=0;  fNH2Sel=0; 
+    for (auto& hadron : NegHadrons) {
+      VarManager::ResetValues(0, VarManager::kNVars, fValuesHadron);
+      VarManager::FillTrack<gkTrackFillMap>(hadron, fValuesHadron); 
+      fHistMan->FillHistClass("Hadrons", fValuesHadron);
+      fHistMan->FillHistClass("Hadron2", fValuesHadron);
+      fNH2++;  
+      
+      if (!(hadron.isBarrelSelected() & (uint8_t(1) << fNHadronCutBit))) {continue;}
+      fHistMan->FillHistClass("HadronsSelected", fValuesHadron);
+      fHistMan->FillHistClass("Hadron2Selected", fValuesHadron);
+      fNH2Sel++;
+    }
+    
+    if(fNH1Sel > 0 && fNH2Sel >0 ){fEventsPassingHH++;}//FIXME: not exactly they must pass HHSel, see below in the loops
+ 
+    for (auto& dilepton : dileptons) {
+      VarManager::ResetValues(0, VarManager::kNVars, fValuesDilepton);
+      VarManager::FillTrack<fgDileptonFillMap>(dilepton, fValuesDilepton); 
+      if(!IsDiLeptonSelected(dilepton.mass() )){continue;}
+      
+      for (auto& hadron1 : PosHadrons) {
+	if (!(hadron1.isBarrelSelected() & (uint8_t(1) << fNHadronCutBit))) {  continue;}
+	//////////loop over 2. had
+	for (auto& hadron2 : NegHadrons) {
+	  if (!(hadron2.isBarrelSelected() & (uint8_t(1) << fNHadronCutBit))) {continue;}
+	  // FIXME: At the moment there is no check on whether this hadron is one of the dilepton daughters!
+
+	  VarManager::FillDileptonDihadron(dilepton, hadron1, hadron2, fValuesDilepDihad);
+	  fHistMan->FillHistClass("Dihadron", fValuesDilepDihad);
+	  fHistMan->FillHistClass("DihadronSelected", fValuesDilepDihad);//same as Dihadron
+	  fHistMan->FillHistClass("DileptonDihadron", fValuesDilepDihad);
+	  fNHHSel++; //same as fEventsPassingLLHH //FIXME:: double counting with n-dill >1 -
+	}//neg hadrons loop
+      } //pos hadrons loop
+    }//dilep loop
+    /////////////////////////////////////////
+    fEventsPassingLLHH++;
+    
+    VarManager::ResetValues(0, VarManager::kNVars, fValuesStat);
+    FillStatistics( 
+		   fAllEvents,  fEventsPassingLL,  fEventsPassingLLHH, fSelEvents,   fNLL,  fNLLSel, fNHH, fNHHSel, fNH1, fNH1Sel,  fNH2, fNH2Sel,
+		   fValuesStat);
+    fHistMan->FillHistClass("Statistics", fValuesStat);
+    
+  }
+};
+
+///////////// end tariq exotics
+//////////////////////////////////
+
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
     adaptAnalysisTask<DQEventSelection>(cfgc),
-    adaptAnalysisTask<DQBarrelTrackSelection>(cfgc),
-    adaptAnalysisTask<DQEventMixing>(cfgc),
-    adaptAnalysisTask<DQMuonTrackSelection>(cfgc),
-    adaptAnalysisTask<DQTableReader>(cfgc),
-    adaptAnalysisTask<DQDileptonHadronAnalysis>(cfgc)};
+      adaptAnalysisTask<DQBarrelTrackSelection>(cfgc),
+      adaptAnalysisTask<DQEventMixing>(cfgc),
+      adaptAnalysisTask<DQMuonTrackSelection>(cfgc),
+      adaptAnalysisTask<DQTableReader>(cfgc),
+      adaptAnalysisTask<DQDileptonHadronAnalysis>(cfgc),
+      adaptAnalysisTask<DQDileptonDiHadronAnalysis>(cfgc, TaskName{"d-q-xcand-creator"} )};
 }
 
 void DefineHistograms(HistogramManager* histMan, TString histClasses)

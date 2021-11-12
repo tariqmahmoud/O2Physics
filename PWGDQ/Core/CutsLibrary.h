@@ -35,6 +35,41 @@ AnalysisCompositeCut* o2::aod::dqcuts::GetCompositeCut(const char* cutName)
   AnalysisCompositeCut* cut = new AnalysisCompositeCut(cutName, cutName);
   std::string nameStr = cutName;
 
+  
+///////////////////////////////////////////////////////////////
+////////////tariq
+  if (!nameStr.compare("LooseCut")) {
+    cut->AddCut(GetAnalysisCut("loose")); //all common cuts for pi and el  as in aliphysics
+    cut->AddCut(GetAnalysisCut("standardPrimaryTrack")); //dca
+    //all cuts (el and pi) as in aliphysics except pid.
+    return cut;
+  }
+
+
+  if (!nameStr.compare("PionSelection")) {
+    cut->AddCut(GetAnalysisCut("pionStandardQuality")); //all cuts are moved to loose
+    cut->AddCut(GetAnalysisCut("PionPID")); 
+     return cut;
+  }
+  
+ if (!nameStr.compare("jpsiPID_tm")) {
+    cut->AddCut(GetAnalysisCut("electronStandardQuality_tm")); //same as electronStandardQuality except for kTPCncls, 70.0, 161.
+    cut->AddCut(GetAnalysisCut("electronPIDnsigma_tm"));
+    return cut;
+  }
+ /*
+  if (!nameStr.compare("electronPIDnsigma_tm")) {
+    cut->AddCut(VarManager::kTPCnSigmaEl, -2.0, 3.0);
+    cut->AddCut(VarManager::kTPCnSigmaPr, 3.5, 3000.0);
+    cut->AddCut(VarManager::kTPCnSigmaPi, 3.5, 3000.0);
+    //cut->AddCut(VarManager::kTPCnSigmaKa, 3.5, 3000.0);
+    return cut;
+  }
+*/
+  //////////////// end tariq
+///////////////////////////////////////////////////////////////
+
+
   if (!nameStr.compare("jpsiO2MCdebugCuts")) {
     cut->AddCut(GetAnalysisCut("jpsiStandardKine"));
     cut->AddCut(GetAnalysisCut("electronStandardQualityForO2MCdebug"));
@@ -493,6 +528,78 @@ AnalysisCut* o2::aod::dqcuts::GetAnalysisCut(const char* cutName)
     cut->AddCut(VarManager::kIsLegFromGamma, 0.5, 1.5, false);
     return cut;
   }
+ 
+  //////////////////////////////////////////////////////////
+  ////////////tariq
+ if (!nameStr.compare("loose")) {
+    cut->AddCut(VarManager::kVtxZ, -10.0, 10.0);
+    cut->AddCut(VarManager::kEta, -0.9, 0.9);
+    cut->AddCut(VarManager::kPt, 0.2, 1000.0);
+    cut->AddCut(VarManager::kTPCchi2, 0.0, 4.0);
+    cut->AddCut(VarManager::kITSchi2, 0.0, 30.0);
+    cut->AddCut(VarManager::kTPCncls, 70.0, 161.);
+    cut->AddCut(VarManager::kIsSPDany, 0.5, 1.5);//check
+    cut->AddCut(VarManager::kIsITSrefit, 0.5, 1.5);//check
+    cut->AddCut(VarManager::kIsTPCrefit, 0.5, 1.5);//check
+
+    cut->AddCut(VarManager::kTrackDCAxy, -1.0, 1.0);
+    cut->AddCut(VarManager::kTrackDCAz, -3.0, 3.0);
+    return cut;
+  }
+ //   /*
+
+ if (!nameStr.compare("pionStandardQuality")) {
+    cut->AddCut(VarManager::kPt, 0.2, 1.1); 
+    cut->AddCut(VarManager::kEta, -0.9, 0.9); //moved to loose
+    cut->AddCut(VarManager::kIsSPDany, 0.5, 1.5);
+    cut->AddCut(VarManager::kIsITSrefit, 0.5, 1.5);
+    cut->AddCut(VarManager::kIsTPCrefit, 0.5, 1.5);
+
+    cut->AddCut(VarManager::kTPCchi2, 0.0, 4.0);
+    cut->AddCut(VarManager::kITSchi2, 0.0, 30.0);
+    cut->AddCut(VarManager::kTPCncls, 70.0, 161.);
+    cut->AddCut(VarManager::kTrackDCAxy, -1.0, 1.0);
+    cut->AddCut(VarManager::kTrackDCAz, -3.0, 3.0);
+    return cut;
+  }
+
+  if (!nameStr.compare("PionPID")) {
+    cut->AddCut(VarManager::kTPCnSigmaPi, -3.0, 3.0, false, VarManager::kPin, 0.0, 1e+10, false);
+    cut->AddCut(VarManager::kTPCnSigmaEl, -2.0, 2.0, true);
+    cut->AddCut(VarManager::kTPCnSigmaPr, -3.0, 3.0, true);
+    cut->AddCut(VarManager::kTPCnSigmaKa, -3.0, 3.0, true);
+
+    return cut;
+  }
+
+  //////// electrons tariq
+  if (!nameStr.compare("electronStandardQuality_tm")) {
+    cut->AddCut(VarManager::kIsSPDany, 0.5, 1.5);
+    cut->AddCut(VarManager::kIsITSrefit, 0.5, 1.5);
+    cut->AddCut(VarManager::kIsTPCrefit, 0.5, 1.5);
+    cut->AddCut(VarManager::kTPCchi2, 0.0, 4.0);
+    cut->AddCut(VarManager::kITSchi2, 0.0, 30.0);
+    cut->AddCut(VarManager::kTPCncls, 70.0, 161.);
+    
+    cut->AddCut(VarManager::kPt, 1.0, 1000.0);
+    cut->AddCut(VarManager::kEta, -0.9, 0.9);
+    
+    cut->AddCut(VarManager::kTrackDCAxy, -1.0, 1.0);
+    cut->AddCut(VarManager::kTrackDCAz, -3.0, 3.0);
+    
+    return cut;
+  }
+
+ if (!nameStr.compare("electronPIDnsigma_tm")) {
+    cut->AddCut(VarManager::kTPCnSigmaEl, -2.0, 3.0);
+    cut->AddCut(VarManager::kTPCnSigmaPr, 3.5, 3000.0);
+    cut->AddCut(VarManager::kTPCnSigmaPi, 3.5, 3000.0);
+    //cut->AddCut(VarManager::kTPCnSigmaKa, 3.5, 3000.0);
+    return cut;
+  }
+
+  ////////////end tariq
+  //////////////////////////////////////////////////////////
 
   if (!nameStr.compare("muonQualityCuts")) {
     cut->AddCut(VarManager::kEta, -4.0, -2.5);

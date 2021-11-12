@@ -23,6 +23,7 @@
 #include "Math/Vector3D.h"
 #include "Math/GenVector/Boost.h"
 #include <TRandom.h>
+#include <TLorentzVector.h> //tariq 
 
 #include <vector>
 #include <map>
@@ -49,7 +50,8 @@ using Vec3D = ROOT::Math::SVector<double, 3>;
 // TODO: create an array holding these constants for all needed particles or check for a place where these are already defined
 static const float fgkElectronMass = 0.000511; // GeV
 static const float fgkMuonMass = 0.105;        // GeV
-
+static const float fgkPionMass = 0.13957;        // GeV, Tariq
+static const float fgkJPsiMass = 3.0969;        // GeV, Tariq
 //_________________________________________________________________________
 class VarManager : public TObject
 {
@@ -270,6 +272,39 @@ class VarManager : public TObject
     kDeltaPhi,
     kDeltaPhiSym,
     kNCorrelationVariables,
+  //////// exotics or jpsi+h+h (tariq
+    // Statistics These variables are temprory
+    kAssociatedPt,
+    kAssociated2Pt,
+    kMassTrigger,
+
+    kNAllEvents,
+    kNEventsPassingLL,
+    kNLL,
+    kNLLSel,
+    kNH1,
+    kNH1Sel,
+    kNH2,
+    kNH2Sel,
+    kNHH,
+    kNHHSel, 
+
+    // hh
+    kHHMass,
+    kHHPt,
+    kHHEta,
+    kHHPhi,
+    //jpsi h h
+    kLLHHMass,
+    kLLHHPt,
+    kLLHHEta,
+    kLLHHPhi,
+    kAlphaLL,
+    kAlphaH1,
+    kAlphaH2,
+    kAlphaLLH1,
+    kAlphaLLH2,
+    kDeltaQ,
 
     // Index used to scan bit maps
     kBitMapIndex,
@@ -356,7 +391,9 @@ class VarManager : public TObject
   template <int pairType, typename C, typename T>
   static void FillPairVertexing(C const& collision, T const& t1, T const& t2, float* values = nullptr);
   template <typename T1, typename T2>
-  static void FillDileptonHadron(T1 const& dilepton, T2 const& hadron, float* values = nullptr, float hadronMass = 0.0f);
+    static void FillDileptonHadron(T1 const& dilepton, T2 const& hadron, float* values = nullptr, float hadronMass = 0.0f);
+  template <typename T1, typename T2>
+    static void FillDileptonDihadron(T1 const& dilepton, T2 const& hadron1,  T2 const& hadron2, float* values = nullptr);
 
  public:
   VarManager();
@@ -1025,5 +1062,64 @@ void VarManager::FillDileptonHadron(T1 const& dilepton, T2 const& hadron, float*
   if (fgUsedVars[kDeltaEta]) {
     values[kDeltaEta] = dilepton.eta() - hadron.eta();
   }
+}
+////////////////////////////////////
+/////tariq
+template <typename T1, typename T2>
+void VarManager::FillDileptonDihadron(T1 const& dilepton, T2 const& hadron1, T2 const& hadron2, float* values){
+ 
+  static const float hadron1Mass=fgkPionMass;
+  static const float hadron2Mass=fgkPionMass;
+  TLorentzVector vecLL; TLorentzVector vecH1; TLorentzVector vecH2; 
+  double LLMass=fgkJPsiMass;
+  values[kMassTrigger] =dilepton.mass();
+  //LLMass=dilepton.mass();
+  
+  vecLL.SetPtEtaPhiM(dilepton.pt(), dilepton.eta(), dilepton.phi(), LLMass);
+  vecH1.SetPtEtaPhiM(hadron1.pt(), hadron1.eta(), hadron1.phi(), hadron1Mass);  
+  vecH2.SetPtEtaPhiM(hadron2.pt(), hadron2.eta(), hadron2.phi(), hadron2Mass);
+  /* cout<<"==============================================================================================="<<endl; */
+  /* cout<<"ll: pt = "<<dilepton.pt()<<" eta = "<< dilepton.eta()<<" phi = "<< dilepton.phi()<<" m = "<< LLMass<<endl; */
+  /* cout<<"h1: pt = "<<hadron1.pt()<<" eta = "<< hadron1.eta()<<" phi = "<< hadron1.phi()<<endl; */
+  /* cout<<"h2: pt = "<<hadron2.pt()<<" eta = "<< hadron2.eta()<<" phi = "<< hadron2.phi()<<endl; */
+  /* cout<<"==============================================================================================="<<endl; */
+  
+  
+  TLorentzVector vHH = vecH1 + vecH2;
+  TLorentzVector vLLHH= vecLL + vHH;
+  /* cout<<"hh: pt = "<<vHH.Pt()<<" eta = "<< vHH.Eta()<<" phi = "<< vHH.Phi()<<endl; */
+  /* cout<<"llhh: pt = "<<vLLHH.Pt()<<" eta = "<< vLLHH.Eta()<<" phi = "<< vLLHH.Phi()<<endl; */
+  /* cout<<"==============================================================================================="<<endl; */
+  
+  values[kAssociatedPt] = hadron1.pt();
+  values[kAssociated2Pt] = hadron2.pt();
+  
+  values[kHHMass] = vHH.M();
+  values[kHHPt] = vHH.Pt();
+  values[kHHEta] = vHH.Eta();
+  values[kHHPhi] = vHH.Phi();
+  
+  values[kLLHHMass] = vLLHH.M();
+  values[kLLHHPt] = vLLHH.Pt();
+  values[kLLHHEta] = vLLHH.Eta();
+  values[kLLHHPhi] = vLLHH.Phi();
+  
+  double AlphaLL=vLLHH.Angle(vecLL.Vect());
+  double AlphaH1=vLLHH.Angle(vecH1.Vect());//pos h
+  double AlphaH2=vLLHH.Angle(vecH2.Vect());//pos h
+  values[kAlphaLL] = AlphaLL;
+  values[kAlphaH1] = AlphaH1;
+  values[kAlphaH2] = AlphaH2;
+  
+  double AlphaLLH1=vecLL.Angle(vecH1.Vect());
+  double AlphaLLH2=vecLL.Angle(vecH2.Vect());
+  values[kAlphaLLH1] = AlphaLLH1;
+  values[kAlphaLLH2] = AlphaLLH2;
+  
+  values[kDeltaQ] = vLLHH.M()-fgkJPsiMass-vHH.M();
+  
+  
+  //  }
+  
 }
 #endif
